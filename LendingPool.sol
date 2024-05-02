@@ -14,6 +14,12 @@ contract LendingPool1 {
     mapping(address => uint256) public repayable_interest;
 
     uint256 public totalDeposits;
+    mapping(address => uint256) public interest_balances;
+    mapping(address => uint256) public deposit_timestamp;
+    mapping(address => uint256) public accruedInterest;
+
+    mapping(address => uint256) public withdrawInterest;
+
    
 
     ATokenETH public token; // Token contract address
@@ -39,6 +45,22 @@ contract LendingPool1 {
         token.mintTokens(msg.sender,  _ethAmount); // Mint tokens directly to the user
         balances[msg.sender] += _ethAmount;
         totalDeposits += _ethAmount;
+        if (balances[msg.sender] == _ethAmount) {
+            isFirstWithdraw = true;
+            deposit_timestamp[msg.sender] = block.timestamp;
+            accruedInterest[msg.sender] = 0;
+            interest_balances[msg.sender] = _ethAmount;
+        }
+        else {
+            accruedInterest[msg.sender] += ((block.timestamp - deposit_timestamp[msg.sender])) ;
+            deposit_timestamp[msg.sender] = block.timestamp;
+            interest_balances[msg.sender] += _ethAmount;
+        }
+        console.log(balances[msg.sender]);
+        console.log(deposit_timestamp[msg.sender]);
+        console.log(accruedInterest[msg.sender]);
+
+
         emit Deposit(msg.sender, _ethAmount,  _ethAmount);
         emit BalanceAfterDeposit(msg.sender, balances[msg.sender]);
     }
@@ -48,9 +70,24 @@ contract LendingPool1 {
         
         console.log(balances[msg.sender]);
         require(balances[msg.sender] >= _amount, "Insufficient balance");
-        token.burnTokens(msg.sender,  _amount);
 
-        payable(msg.sender).transfer(_amount);
+        if (isFirstWithdraw) {
+            withdrawInterest[msg.sender] = ((accruedInterest[msg.sender])+ (block.timestamp-deposit_timestamp[msg.sender]));
+            
+            payable(msg.sender).transfer(_amount+withdrawInterest[msg.sender]);
+            withdrawInterest[msg.sender] = 0;
+            deposit_timestamp[msg.sender] = block.timestamp;
+            interest_balances[msg.sender] -= _amount;
+            isFirstWithdraw=false;
+        }
+        else if (!isFirstWithdraw && (interest_balances[msg.sender]>_amount)){
+            withdrawInterest[msg.sender] = ((block.timestamp-deposit_timestamp[msg.sender]));
+            console.log(withdrawInterest[msg.sender]);
+            payable(msg.sender).transfer(_amount+withdrawInterest[msg.sender]);
+        }
+        console.log(balances[msg.sender]);
+
+        token.burnTokens(msg.sender,  _amount);
         balances[msg.sender] -= _amount;
         totalDeposits -= _amount;
         
