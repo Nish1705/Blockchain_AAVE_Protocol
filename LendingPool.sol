@@ -17,7 +17,7 @@ contract LendingPool1 {
     mapping(address => uint256) public interest_balances;
     mapping(address => uint256) public deposit_timestamp;
     mapping(address => uint256) public accruedInterest;
-
+    bool public isFirstWithdraw;
     mapping(address => uint256) public withdrawInterest;
 
    
@@ -84,6 +84,7 @@ contract LendingPool1 {
             withdrawInterest[msg.sender] = ((block.timestamp-deposit_timestamp[msg.sender]));
             console.log(withdrawInterest[msg.sender]);
             payable(msg.sender).transfer(_amount+withdrawInterest[msg.sender]);
+            withdrawInterest[msg.sender] = 0;
         }
         console.log(balances[msg.sender]);
 
@@ -179,9 +180,5 @@ contract LendingPool1 {
 
 
     }
-
-
-
-
 
 }
