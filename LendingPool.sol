@@ -84,6 +84,7 @@ contract LendingPool1 {
             withdrawInterest[msg.sender] = ((block.timestamp-deposit_timestamp[msg.sender]));
             console.log(withdrawInterest[msg.sender]);
             payable(msg.sender).transfer(_amount+withdrawInterest[msg.sender]);
+            interest_balances[msg.sender] -= _amount;
             withdrawInterest[msg.sender] = 0;
         }
         console.log(balances[msg.sender]);
