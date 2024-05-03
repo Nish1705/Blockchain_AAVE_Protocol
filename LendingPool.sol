@@ -52,7 +52,7 @@ contract LendingPool1 {
             interest_balances[msg.sender] = _ethAmount;
         }
         else {
-            accruedInterest[msg.sender] += ((block.timestamp - deposit_timestamp[msg.sender])) ;
+            accruedInterest[msg.sender] += (block.timestamp - deposit_timestamp[msg.sender])*balances[msg.sender]/1000000 ;
             deposit_timestamp[msg.sender] = block.timestamp;
             interest_balances[msg.sender] += _ethAmount;
         }
@@ -67,31 +67,35 @@ contract LendingPool1 {
 
 
     function withdraw(uint256 _amount) external payable{
-        
+        uint256 time_now;
+        time_now = block.timestamp;
         console.log(balances[msg.sender]);
         require(balances[msg.sender] >= _amount, "Insufficient balance");
 
         if (isFirstWithdraw) {
-            withdrawInterest[msg.sender] = ((accruedInterest[msg.sender])+ (block.timestamp-deposit_timestamp[msg.sender]));
-            
+            withdrawInterest[msg.sender] = ((accruedInterest[msg.sender])+ (time_now-deposit_timestamp[msg.sender])*balances[msg.sender]/1000000);
+            console.log(withdrawInterest[msg.sender]);
             payable(msg.sender).transfer(_amount+withdrawInterest[msg.sender]);
             withdrawInterest[msg.sender] = 0;
-            deposit_timestamp[msg.sender] = block.timestamp;
+            
             interest_balances[msg.sender] -= _amount;
             isFirstWithdraw=false;
         }
-        else if (!isFirstWithdraw && (interest_balances[msg.sender]>_amount)){
-            withdrawInterest[msg.sender] = ((block.timestamp-deposit_timestamp[msg.sender]));
+        else if (!isFirstWithdraw){
+            withdrawInterest[msg.sender] = ((time_now-deposit_timestamp[msg.sender])*balances[msg.sender]/1000000);
             console.log(withdrawInterest[msg.sender]);
             payable(msg.sender).transfer(_amount+withdrawInterest[msg.sender]);
             interest_balances[msg.sender] -= _amount;
             withdrawInterest[msg.sender] = 0;
         }
-        console.log(balances[msg.sender]);
-
+        
+        
+        deposit_timestamp[msg.sender] = time_now;
         token.burnTokens(msg.sender,  _amount);
         balances[msg.sender] -= _amount;
         totalDeposits -= _amount;
+        console.log("Balances Left :");
+        console.log(balances[msg.sender]);
         
         emit Withdraw(msg.sender, _amount);
     }
@@ -99,19 +103,18 @@ contract LendingPool1 {
     function borrow(uint256 _amount) external payable {
         require(!isBorrower[msg.sender], "You have already borrowed funds! Clear Debt To borrow again!");
         require(totalDeposits>_amount,"Not Enough Funds");
-        require(msg.value>_amount,"Provide Collateral To continue the transaction");
+        require(msg.value>_amount || collateral[msg.sender]>_amount,"Provide Collateral To continue the transaction");
         
         
         timestamp_borrow[msg.sender] = block.timestamp;
 
-        // Additional checks for maximum borrowing limits, credit scores, etc. can be added here
+        // Additional checks and state update
         
         collateral[msg.sender] += msg.value;
         borrowedAmounts[msg.sender] += _amount;
         isBorrower[msg.sender] = true;
         isFirstRepay[msg.sender] = true;
         totalDeposits -= _amount;
-        //console.log(_amount);
         payable(msg.sender).transfer(_amount);
         emit Borrow(msg.sender, _amount);
 
@@ -129,7 +132,7 @@ contract LendingPool1 {
             repayable_interest[msg.sender] = 0;
             isFirstRepay[msg.sender] = false;
         }
-        repayable_interest[msg.sender] +=(time_now - timestamp_borrow[msg.sender]);
+        repayable_interest[msg.sender] +=(time_now - timestamp_borrow[msg.sender])*borrowedAmounts[msg.sender]/100000;
         console.log("Interest : ");
         console.log(repayable_interest[msg.sender]);
 
@@ -146,14 +149,17 @@ contract LendingPool1 {
                 
                 // Return Extra funds and collateral
                 payable(msg.sender).transfer(msg.value - total_repayable+collateral[msg.sender]);
-                // Return All collateral
-                //payable(msg.sender).transfer(collateral[msg.sender]);
+                
                 
                 collateral[msg.sender] = 0;
 
                 console.log("Sent Back excess Funds and Collateral!");
                 console.log(msg.value - total_repayable);
                 
+            }
+            else{
+                payable(msg.sender).transfer(collateral[msg.sender]);
+                console.log("Sent Back Collateral!");
             }
             totalDeposits += total_repayable;
             borrowedAmounts[msg.sender] = 0;
@@ -181,5 +187,27 @@ contract LendingPool1 {
 
 
     }
+    function get_total_repayable() external returns(uint256) {
+        uint256 time_now;
+        time_now = block.timestamp;
+
+        if(isFirstRepay[msg.sender]){
+            repayable_interest[msg.sender] = 0;
+            isFirstRepay[msg.sender] = false;
+        }
+        repayable_interest[msg.sender] +=(time_now - timestamp_borrow[msg.sender])*borrowedAmounts[msg.sender]/100000;
+
+        console.log("Interest : ");
+        console.log(repayable_interest[msg.sender]);
+
+        uint256 total_repayable;
+        total_repayable = repayable_interest[msg.sender] + borrowedAmounts[msg.sender];
+        timestamp_borrow[msg.sender] = time_now;
+        return total_repayable; 
+    }
+
+
+
+
 
 }
