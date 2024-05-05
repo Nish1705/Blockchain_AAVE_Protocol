@@ -6,7 +6,7 @@ import "hardhat/console.sol";
 contract AToken is ERC20 {
     address public owner;
     uint256 constant public AAVE_PRICE_USD = 88.53 * (10 ** 18); 
-    uint256 constant public MTC_PRICE_USD = 0.72 * (10 ** 18); 
+    uint256 constant public MTC_PRICE_USD = 1.72 * (10 ** 18); 
 
     uint256 public mtcToUsd;
     uint256 public aaveToUsd;
