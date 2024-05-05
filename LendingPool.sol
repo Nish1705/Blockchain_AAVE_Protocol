@@ -47,6 +47,7 @@ contract LendingPool {
     constructor(address _tokenAddress) payable{
         token = new AToken();
         mytoken_address = ERC20(_tokenAddress);
+        ibt_totalDeposits = mytoken_address.balanceOf(address(this));
 
         //mytoken_address = ERC20(0xe992fa5B88881Fd8a1F9b3D093d3bc6F47abBB8F);
     }
@@ -96,7 +97,7 @@ contract LendingPool {
 
         token.mintTokensWithUSD(msg.sender, _ibtAmount); // Mint tokens directly to the user
         ibt_balances[msg.sender] += _ibtAmount;
-        ibt_totalDeposits += _ibtAmount;
+        ibt_totalDeposits = mytoken_address.balanceOf(address(this));
         if (ibt_balances[msg.sender] == _ibtAmount) {
             ibt_isFirstWithdraw = true;
             ibt_deposit_timestamp[msg.sender] = block.timestamp;
@@ -155,7 +156,7 @@ contract LendingPool {
         ibt_deposit_timestamp[msg.sender] = time_now;
         token.burnTokensWithUSD(msg.sender, _amount);
         ibt_balances[msg.sender] -= _amount;
-        ibt_totalDeposits -= _amount;
+        ibt_totalDeposits = mytoken_address.balanceOf(address(this));
         console.log("Balances Left :");
         console.log(ibt_balances[msg.sender]);
 
@@ -168,7 +169,8 @@ contract LendingPool {
         time_now = block.timestamp;
         console.log(matic_balances[msg.sender]);
         require(matic_balances[msg.sender] >= _amount, "Insufficient balance");
-        require((matic_balances[msg.sender]-_amount)*(7)*(MTC_price)/10**19>= total_borrowed[msg.sender], "Sori! Collateral depreciated :( ");
+        //require((matic_balances[msg.sender]-_amount)*(7)*(MTC_price)/10**19>= total_borrowed[msg.sender], "Sori! Collateral depreciated :( ");
+        require(total_borrowed[msg.sender] == 0, "Sorry can't withdraw until the debt is cleared.");
         if (matic_isFirstWithdraw) {
             matic_withdrawInterest[msg.sender] = ((
                 matic_accruedInterest[msg.sender]
@@ -232,6 +234,7 @@ contract LendingPool {
     }
 
     function borrow_ibt(uint256 _amount) external payable {
+        ibt_totalDeposits = mytoken_address.balanceOf(address(this));
         require(!ibt_isBorrower[msg.sender], "You have already borrowed funds! Clear Debt To borrow again!");
         require(ibt_totalDeposits>_amount,"Not Enough Funds");
         require(msg.value>_amount || borrowable_amount[msg.sender]>_amount,"Provide Collateral To continue the transaction");
@@ -246,8 +249,9 @@ contract LendingPool {
         borrowable_amount[msg.sender] -= _amount;
         ibt_isBorrower[msg.sender] = true;
         ibt_isFirstRepay[msg.sender] = true;
-        ibt_totalDeposits -= _amount;
+        
         mytoken_address.transfer(msg.sender,_amount);
+        ibt_totalDeposits = mytoken_address.balanceOf(address(this));
         emit Borrow(msg.sender, _amount);
 
     }
@@ -297,10 +301,11 @@ contract LendingPool {
             
         }
         else{
+            matic_isBorrower[msg.sender] = true;
 
             if(matic_repayable_interest[msg.sender]<= msg.value){
-                borrowable_amount[msg.sender] += (matic_borrowedAmounts[msg.sender] - (msg.value-matic_repayable_interest[msg.sender]))*(MTC_price)/10**18;
-                total_borrowed[msg.sender] -= matic_borrowedAmounts[msg.sender]*(MTC_price)/10**18;
+                borrowable_amount[msg.sender] += (msg.value-matic_repayable_interest[msg.sender])*(MTC_price)/10**18;
+                total_borrowed[msg.sender] -= (msg.value-matic_repayable_interest[msg.sender])*(MTC_price)/10**18;
                 matic_borrowedAmounts[msg.sender] -= msg.value-matic_repayable_interest[msg.sender];
                 matic_repayable_interest[msg.sender] = 0;
 
@@ -322,7 +327,9 @@ contract LendingPool {
 
     function ibt_repay(uint256 _amount) external{
         uint256 repay_amnt = _amount;
+
         require(ibt_isBorrower[msg.sender],"You have not borrowed any funds!");
+        require(mytoken_address.transferFrom(msg.sender, address(this), repay_amnt));
         uint256 time_now;
         time_now = block.timestamp;
         console.log("Borrowed at timestamp : ");
@@ -349,7 +356,7 @@ contract LendingPool {
             if (repay_amnt > total_repayable) {
                 
                 // Return Extra funds and collateral
-                mytoken_address.transferFrom(msg.sender, address(this), repay_amnt - total_repayable);
+                mytoken_address.transfer(msg.sender, repay_amnt - total_repayable);
                 
 
                 console.log("Sent Back excess Funds and Collateral!");
@@ -357,7 +364,7 @@ contract LendingPool {
                 
             }
 
-            ibt_totalDeposits += total_repayable;
+            ibt_totalDeposits = mytoken_address.balanceOf(address(this));
             borrowable_amount[msg.sender] += ibt_borrowedAmounts[msg.sender];
             total_borrowed[msg.sender] -= ibt_borrowedAmounts[msg.sender];
             ibt_borrowedAmounts[msg.sender] = 0;
@@ -365,10 +372,11 @@ contract LendingPool {
             
         }
         else{
+            ibt_isBorrower[msg.sender] = true;
 
             if(ibt_repayable_interest[msg.sender]<= repay_amnt){
-                borrowable_amount[msg.sender] += (ibt_borrowedAmounts[msg.sender] - (repay_amnt-ibt_repayable_interest[msg.sender]));
-                total_borrowed[msg.sender] -= ibt_borrowedAmounts[msg.sender]; 
+                borrowable_amount[msg.sender] += repay_amnt-ibt_repayable_interest[msg.sender];
+                total_borrowed[msg.sender] -= repay_amnt-ibt_repayable_interest[msg.sender];
                 ibt_borrowedAmounts[msg.sender] -= repay_amnt-ibt_repayable_interest[msg.sender];
                 ibt_repayable_interest[msg.sender] = 0;
 
@@ -376,7 +384,7 @@ contract LendingPool {
             else{
                 ibt_repayable_interest[msg.sender] -= repay_amnt;
             }
-            ibt_totalDeposits += repay_amnt;         
+            ibt_totalDeposits = mytoken_address.balanceOf(address(this));         
             
             
         }
