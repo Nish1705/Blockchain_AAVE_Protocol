@@ -58,7 +58,7 @@ contract LendingPool {
     // Deposit funds into the lending pool and mint tokens
     function depositMATIC() external payable {
         uint256 _maticAmount = msg.value;
-        MTC_price = 0.72 * (10 ** 18);
+        MTC_price = 1.72 * (10 ** 18);
         require(_maticAmount > 0, "Amount must be greater than 0");
 
         token.mintTokenswithMTC(msg.sender, _maticAmount); // Mint tokens directly to the user
@@ -169,8 +169,8 @@ contract LendingPool {
         time_now = block.timestamp;
         console.log(matic_balances[msg.sender]);
         require(matic_balances[msg.sender] >= _amount, "Insufficient balance");
-        //require((matic_balances[msg.sender]-_amount)*(7)*(MTC_price)/10**19>= total_borrowed[msg.sender], "Sori! Collateral depreciated :( ");
-        require(total_borrowed[msg.sender] == 0, "Sorry can't withdraw until the debt is cleared.");
+        require((matic_balances[msg.sender]-_amount)*(7)*(MTC_price)/10**19>= total_borrowed[msg.sender], "Sori! Collateral depreciated :( ");
+        //require(total_borrowed[msg.sender] == 0, "Sorry can't withdraw until the debt is cleared.");
         if (matic_isFirstWithdraw) {
             matic_withdrawInterest[msg.sender] = ((
                 matic_accruedInterest[msg.sender]
